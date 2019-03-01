@@ -19777,12 +19777,17 @@ module.exports =
 	     * (going for a kill).
 	     * @param from The coordinate we're currently at.
 	     * @param to The coordinate we wish to reach.
-	     * @return The shortest path to the given point.
+	     * @return The shortest path to the given point. An empty array
+	     * signifies no path could be found.
 	     */
 	    var A_Star = function A_Star(from, to) {
-	        // Build's a grid array that the A* library will accept
+	        if (!to) {
+	            // If we can't resolve our target, just return the start Coord.
+	            return [from];
+	        }
+	        // Builds a grid array that the A* library will accept
 	        var grid = [];
-	        // Fill our array with 1's
+	        // Fill our array with 1's (empty space)
 	        for (var i = 0; i < arena.width; i++) {
 	            grid[i] = [];
 	            for (var j = 0; j < arena.height; j++) {
@@ -19790,20 +19795,18 @@ module.exports =
 	            }
 	        }
 	        var snakes = enemies.concat(me);
-	        // We wish to "fill in" our grid with zeros wherever we see
+	        // We wish to fill in our grid with zeros wherever we see
 	        // a snake segment, denoting "walls" for our A* algorithm 
 	        for (var i = 0; i < snakes.length; i++) {
 	            for (var j = 0; j < snakes[i].body.length; j++) {
 	                grid[snakes[i].body[j].x][snakes[i].body[j].y] = 0;
 	            }
 	        }
-	        // console.log('Grid:', grid)
 	        var graph = new astar.Graph(grid);
-	        //console.log(graph)
 	        var start = graph.grid[from.x][from.y];
 	        var end = graph.grid[to.x][to.y];
 	        var path = astar.astar.search(graph, start, end);
-	        //console.log(path)
+	        // Return array of Coord objects, denoting the path to take
 	        return path.map(function (gridNode) {
 	            return new Coord_1.default(gridNode.x, gridNode.y);
 	        });
@@ -19839,8 +19842,14 @@ module.exports =
 	        return arr;
 	    }, []);
 	    var closeFood = snake_utils_1.closest(me.body[0], food);
+	    // Tail chase
+	    //let head = me.body[0]
+	    //let tail = me.body[-1]
+	    //console.log('Head:'+head.toString()+' Tail:'+tail.toString())
+	    //const pathToTail = A_Star(me.body[0], me.body[-1])
+	    //console.log('Path to tail: ', pathToTail)
+	    //const moveChoice = coordToMove(me.body[0], pathToTail[1])
 	    var moveChoice = safeMoves[0];
-	    console.log('A* to origin: ', A_Star(me.body[0], new Coord_1.default(0, 0)));
 	    // Response data
 	    var responseData = {
 	        move: moveChoice,
@@ -19932,6 +19941,13 @@ module.exports =
 
 	Object.defineProperty(exports, "__esModule", { value: true });
 	var Coord_1 = __webpack_require__(129);
+	/**
+	 * Converts a Move ('up' | 'down' | 'left' | 'right') into a Coord
+	 * based on the given starting coordinate.
+	 * @param coord The current location of the snake.
+	 * @param direction The direction to move in.
+	 * @return A coordinate.
+	 */
 	exports.moveToCoord = function (coord, direction) {
 	    switch (direction) {
 	        case 'up':
@@ -19946,9 +19962,23 @@ module.exports =
 	            return coord;
 	    }
 	};
+	/**
+	 * Takes a start and end coordinate, and determines the Move used
+	 * to get there.
+	 * @param from Starting Coord.
+	 * @param to Ending Coord.
+	 * @return The direction to move ('up' | 'down' | 'left' | 'right')
+	 */
 	exports.coordToMove = function (from, to) {
-	    if (to.x > from.x) return 'right';else if (to.x < from.x) return 'left';else if (to.y > from.y) return 'down';else return 'up';
+	    if (to.x > from.x) return 'right';else if (to.x < from.x) return 'left';else if (to.y > from.y) return 'down';else if (to.y < from.y) return 'up';else return null;
 	};
+	/**
+	 * Determines the closest coordinate to a given location from
+	 * a list of other coordinates.
+	 * @param from The starting location.
+	 * @param array An array of other Coords.
+	 * @return The closest coord to `from`
+	 */
 	exports.closest = function (from, array) {
 	    var closest = array[0];
 	    if (array.length > 1) {

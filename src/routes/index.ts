@@ -115,9 +115,14 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 	 * (going for a kill).
 	 * @param from The coordinate we're currently at.
 	 * @param to The coordinate we wish to reach.
-	 * @return The shortest path to the given point.
+	 * @return The shortest path to the given point. An empty array
+	 * signifies no path could be found.
 	 */
 	const A_Star = (from: Coord, to: Coord): Coord[] => {
+		if (!to) {
+			// If we can't resolve our target, just return the start Coord.
+			return [from]
+		}
 		// Builds a grid array that the A* library will accept
 		let grid: Array<Array<number>> = []
 		// Fill our array with 1's (empty space)
@@ -175,10 +180,15 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 	}, [])
 	
 	let closeFood = closest(me.body[0], food)
+	// Tail chase
+	//let head = me.body[0]
+	//let tail = me.body[-1]
+	//console.log('Head:'+head.toString()+' Tail:'+tail.toString())
+	//const pathToTail = A_Star(me.body[0], me.body[-1])
+	//console.log('Path to tail: ', pathToTail)
+	//const moveChoice = coordToMove(me.body[0], pathToTail[1])
+
 	const moveChoice = safeMoves[0]
-
-	console.log('A* to origin: ',A_Star(me.body[0], new Coord(0,0)))
-
 	// Response data
 	const responseData: MoveResponseData = {
 		move: moveChoice,
