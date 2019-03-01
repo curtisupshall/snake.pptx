@@ -5,9 +5,9 @@ import {
 } from "../types/battlesnake"
 import Coord from '../Coord'
 import Snake from '../Snake'
-import { moveToCoord, coordToMove, randInt, closest } from '../utils/snake.utils'
+import { moveToCoord, coordToMove, closest } from '../utils/snake.utils'
 
-const astar = require('astar')
+const astar = require('javascript-astar')
 
 interface BattleSnakeRouter {
 	post(route: '/start', cb: (req: StartRequest, res: StartResponse) => any): void
@@ -117,15 +117,28 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 	 * @param to The coordinate we wish to reach.
 	 * @return The shortest path to the given point.
 	 */
-	const A_Star = (from: Coord, to: Coord) => {
-		// Build's a grid array that the A* library will accept
-		let grid = [...Array(arena.width)].map(e => Array(arena.height).fill(1))
-		enemies.concat(me).forEach((snake) => {
-			snake.body.forEach((segment) => {
-				grid[segment.x][segment.y] = 0
-			})
-		})
-		//let graph = new graph()
+	const A_Star = (from: Coord, to: Coord): Coord[] => {
+		// Builds a grid array that the A* library will accept
+		let grid: Array<Array<number>> = []
+		// Fill our array with 1's (empty space)
+		for (let i: number = 0; i < arena.width; i ++) {
+			grid[i] = []
+			for (let j: number = 0; j < arena.height; j ++) grid[i][j] = 1
+		}
+		let snakes = enemies.concat(me)
+		// We wish to fill in our grid with zeros wherever we see
+		// a snake segment, denoting "walls" for our A* algorithm 
+		for (let i = 0; i < snakes.length; i ++) {
+			for (let j = 0; j < snakes[i].body.length; j ++) {
+				grid[snakes[i].body[j].x][snakes[i].body[j].y] = 0
+			}
+		}
+		let graph = new astar.Graph(grid)
+		let start = graph.grid[from.x][from.y]
+		let end = graph.grid[to.x][to.y]
+		let path = astar.astar.search(graph, start, end)
+		// Return array of Coord objects, denoting the path to take
+		return path.map((gridNode) => new Coord(gridNode.x, gridNode.y))
 	}
 
 	/**
@@ -152,7 +165,7 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 
 	/**
 	 * An array of moves that, should we follow it, will kill another
-	 * snake on the board. \
+	 * snake on the board.
 	 */
 	const killMoves: Move[] = dummyHeads.reduce((arr: Move[], dummyHead: DummyHead) => {
 		if (dummyHead.avoid === false) {
@@ -163,6 +176,8 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 	
 	let closeFood = closest(me.body[0], food)
 	const moveChoice = safeMoves[0]
+
+	console.log('A* to origin: ',A_Star(me.body[0], new Coord(0,0)))
 
 	// Response data
 	const responseData: MoveResponseData = {

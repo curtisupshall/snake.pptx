@@ -19689,13 +19689,11 @@ module.exports =
 	var Coord_1 = __webpack_require__(129);
 	var Snake_1 = __webpack_require__(130);
 	var snake_utils_1 = __webpack_require__(131);
+	var astar = __webpack_require__(132);
 	var router = express.Router();
 	router.post('/start', function (req, res) {
 	    var responseData = {
 	        color: "#FF0000",
-	        //name: "carlos-matos",
-	        //head_url: "",
-	        //taunt: "bitconneeeeect!"
 	        headType: 'tongue',
 	        tailType: 'bolt'
 	    };
@@ -19716,17 +19714,17 @@ module.exports =
 	        height: requestData.board.height
 	    };
 	    var me = new Snake_1.default(requestData.you);
-	    var snakes = requestData.board.snakes.reduce(function (arr, snake) {
+	    var enemies = requestData.board.snakes.reduce(function (arr, snake) {
 	        if (snake.id !== me.id) arr.push(new Snake_1.default(snake));
 	        return arr;
 	    }, []);
 	    /**
-	     * An array of coordinates, of which a head *may* appear on in
-	     * the next turn. This does not include those of snakes that
-	     * are shorter than us, since we will hapilly move to that coordinate and
-	     * kill the other snake.
+	     * An array of DummyHeads - coordinates which an enemy snake *may* move into
+	     * on the next turn. Since moving to a Dummy Head square might net us a kill,
+	     * the *avoid* paramter tells us whether or not we should avoid that coordinate.
+	     * See the type definition for *DummyHead*.
 	     */
-	    var dummyHeads = snakes.reduce(function (dummies, snake) {
+	    var dummyHeads = enemies.reduce(function (dummies, snake) {
 	        var head = snake.body[0];
 	        dummies.push.apply(dummies, allMoves.reduce(function (directions, dir) {
 	            var step = snake_utils_1.moveToCoord(head, dir);
@@ -19741,30 +19739,80 @@ module.exports =
 	    var food = requestData.board.food.map(function (food) {
 	        return new Coord_1.default(food.x, food.y);
 	    });
+	    /**
+	     * Determines whether or not a given coordinate is out-of-bounds.
+	     * @param coord The coordinate we're testing.
+	     * @return True if it's out-of-bounds (should avoid), false otherwise.
+	     */
 	    var ooB = function ooB(coord) {
 	        return coord.x < 0 || coord.x >= arena.width || coord.y < 0 || coord.y >= arena.width;
 	    };
+	    /**
+	     * Determines if a given coordinate is occupied by part of
+	     * another snakes body, including out own.
+	     * @param coord The coordinate we're testing.
+	     * @return True if it's a segment, false otherwise.
+	     */
 	    var isSegment = function isSegment(coord) {
-	        return snakes.concat(me).some(function (snake) {
+	        return enemies.concat(me).some(function (snake) {
 	            return snake.hasCoord(coord);
 	        });
 	    };
+	    /**
+	     * Determines whether or not a given coordinate has a piece
+	     * of food located there.
+	     * @param coord The coordinate to test.
+	     * @return True if there's food there, false otherwise.
+	     */
 	    var isFood = function isFood(coord) {
 	        for (var i = 0; i < food.length; i++) {
 	            if (food[i].equals(coord)) return true;
 	        }
 	        return false;
 	    };
-	    var A_Star = function A_Star(coord) {
-	        var grid = Array(arena.width).slice().map(function (e) {
-	            return Array(arena.height).fill(1);
-	        });
-	        snakes.concat(me).forEach(function (snake) {
-	            snake.body.forEach(function (segment) {
-	                grid[segment.x][segment.y] = 0;
-	            });
+	    /**
+	     * Helper method for using the A* library, which gives us the shortest
+	     * path to a desired coordinate. Target might include food (if we're
+	     * hungry), our own tail (stall for time), or an enemy snakes head
+	     * (going for a kill).
+	     * @param from The coordinate we're currently at.
+	     * @param to The coordinate we wish to reach.
+	     * @return The shortest path to the given point.
+	     */
+	    var A_Star = function A_Star(from, to) {
+	        // Build's a grid array that the A* library will accept
+	        var grid = [];
+	        // Fill our array with 1's
+	        for (var i = 0; i < arena.width; i++) {
+	            grid[i] = [];
+	            for (var j = 0; j < arena.height; j++) {
+	                grid[i][j] = 1;
+	            }
+	        }
+	        var snakes = enemies.concat(me);
+	        // We wish to "fill in" our grid with zeros wherever we see
+	        // a snake segment, denoting "walls" for our A* algorithm 
+	        for (var i = 0; i < snakes.length; i++) {
+	            for (var j = 0; j < snakes[i].body.length; j++) {
+	                grid[snakes[i].body[j].x][snakes[i].body[j].y] = 0;
+	            }
+	        }
+	        // console.log('Grid:', grid)
+	        var graph = new astar.Graph(grid);
+	        //console.log(graph)
+	        var start = graph.grid[from.x][from.y];
+	        var end = graph.grid[to.x][to.y];
+	        var path = astar.astar.search(graph, start, end);
+	        //console.log(path)
+	        return path.map(function (gridNode) {
+	            return new Coord_1.default(gridNode.x, gridNode.y);
 	        });
 	    };
+	    /**
+	     * An array of moves that are guarenteed to *at least*
+	     * keep us alive for the next turn. Does not guarentee that
+	     * the move won't back us into a corner, etc.
+	     */
 	    var safeMoves = allMoves.reduce(function (arr, direction) {
 	        var coord = snake_utils_1.moveToCoord(me.body[0], direction);
 	        var isDummyHead = dummyHeads.some(function (dummyHead) {
@@ -19775,11 +19823,15 @@ module.exports =
 	        if (!isDummyHead && !isOoB && !isASegment) {
 	            arr.push(direction);
 	        }
-	        console.log(direction);
-	        console.log('isDummyHead:', isDummyHead, ' isOoB:', isOoB, ' isSegment:', isASegment);
+	        //console.log(direction)
+	        //console.log('isDummyHead:', isDummyHead, ' isOoB:', isOoB, ' isSegment:', isASegment)
 	        return arr;
 	    }, []);
-	    console.log("Safe moves: ", safeMoves);
+	    //console.log("Safe moves: ", safeMoves)
+	    /**
+	     * An array of moves that, should we follow it, will kill another
+	     * snake on the board.
+	     */
 	    var killMoves = dummyHeads.reduce(function (arr, dummyHead) {
 	        if (dummyHead.avoid === false) {
 	            arr.push(snake_utils_1.coordToMove(me.body[0], dummyHead.coord));
@@ -19788,6 +19840,7 @@ module.exports =
 	    }, []);
 	    var closeFood = snake_utils_1.closest(me.body[0], food);
 	    var moveChoice = safeMoves[0];
+	    console.log('A* to origin: ', A_Star(me.body[0], new Coord_1.default(0, 0)));
 	    // Response data
 	    var responseData = {
 	        move: moveChoice,
@@ -19815,6 +19868,12 @@ module.exports =
 	    Coord.prototype.distanceTo = function (coord) {
 	        return Math.abs(this.x - coord.x) + Math.abs(this.y - coord.y);
 	    };
+	    Coord.prototype.toArray = function () {
+	        return [this.x, this.y];
+	    };
+	    Coord.prototype.toString = function () {
+	        return '(' + this.x + ',' + this.y + ')';
+	    };
 	    return Coord;
 	}();
 	exports.default = Coord;
@@ -19838,13 +19897,28 @@ module.exports =
 	            return arr;
 	        }, []);
 	    }
+	    /**
+	     * Determines if the given snakes has one of its body
+	     * segments at the given coordinate.
+	     * @param coord Coord to test.
+	     * @return True if the snake has the coordinate, false otherwise.
+	     */
 	    Snake.prototype.hasCoord = function (coord) {
 	        return this.body.some(function (segment) {
 	            return coord.equals(segment);
 	        });
 	    };
-	    Snake.prototype.isAlive = function () {
-	        return this.health > 0;
+	    // TODO
+	    Snake.prototype.willDie = function () {
+	        return false;
+	    };
+	    /**
+	     * Determines if a snake will grow on the next turn. This
+	     * is useful to know, since snakes that are growing will
+	     * leave their tail behind for an additional turn.
+	     */
+	    Snake.prototype.willGrow = function () {
+	        return this.health == 100;
 	    };
 	    return Snake;
 	}();
@@ -19889,6 +19963,424 @@ module.exports =
 	exports.randInt = function (min, max) {
 	    return Math.floor(Math.random() * (max - min)) + min;
 	};
+
+/***/ }),
+/* 132 */
+/***/ (function(module, exports, __webpack_require__) {
+
+	var __WEBPACK_AMD_DEFINE_FACTORY__, __WEBPACK_AMD_DEFINE_ARRAY__, __WEBPACK_AMD_DEFINE_RESULT__;/* WEBPACK VAR INJECTION */(function(module) {'use strict';
+
+	var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
+
+	// javascript-astar 0.4.1
+	// http://github.com/bgrins/javascript-astar
+	// Freely distributable under the MIT License.
+	// Implements the astar search algorithm in javascript using a Binary Heap.
+	// Includes Binary Heap (with modifications) from Marijn Haverbeke.
+	// http://eloquentjavascript.net/appendix2.html
+
+	(function (definition) {
+	    /* global module, define */
+	    if (( false ? 'undefined' : _typeof(module)) === 'object' && _typeof(module.exports) === 'object') {
+	        module.exports = definition();
+	    } else if (true) {
+	        !(__WEBPACK_AMD_DEFINE_ARRAY__ = [], __WEBPACK_AMD_DEFINE_FACTORY__ = (definition), __WEBPACK_AMD_DEFINE_RESULT__ = (typeof __WEBPACK_AMD_DEFINE_FACTORY__ === 'function' ? (__WEBPACK_AMD_DEFINE_FACTORY__.apply(exports, __WEBPACK_AMD_DEFINE_ARRAY__)) : __WEBPACK_AMD_DEFINE_FACTORY__), __WEBPACK_AMD_DEFINE_RESULT__ !== undefined && (module.exports = __WEBPACK_AMD_DEFINE_RESULT__));
+	    } else {
+	        var exports = definition();
+	        window.astar = exports.astar;
+	        window.Graph = exports.Graph;
+	    }
+	})(function () {
+
+	    function pathTo(node) {
+	        var curr = node,
+	            path = [];
+	        while (curr.parent) {
+	            path.unshift(curr);
+	            curr = curr.parent;
+	        }
+	        return path;
+	    }
+
+	    function getHeap() {
+	        return new BinaryHeap(function (node) {
+	            return node.f;
+	        });
+	    }
+
+	    var astar = {
+	        /**
+	        * Perform an A* Search on a graph given a start and end node.
+	        * @param {Graph} graph
+	        * @param {GridNode} start
+	        * @param {GridNode} end
+	        * @param {Object} [options]
+	        * @param {bool} [options.closest] Specifies whether to return the
+	                   path to the closest node if the target is unreachable.
+	        * @param {Function} [options.heuristic] Heuristic function (see
+	        *          astar.heuristics).
+	        */
+	        search: function search(graph, start, end, options) {
+	            graph.cleanDirty();
+	            options = options || {};
+	            var heuristic = options.heuristic || astar.heuristics.manhattan,
+	                closest = options.closest || false;
+
+	            var openHeap = getHeap(),
+	                closestNode = start; // set the start node to be the closest if required
+
+	            start.h = heuristic(start, end);
+
+	            openHeap.push(start);
+
+	            while (openHeap.size() > 0) {
+
+	                // Grab the lowest f(x) to process next.  Heap keeps this sorted for us.
+	                var currentNode = openHeap.pop();
+
+	                // End case -- result has been found, return the traced path.
+	                if (currentNode === end) {
+	                    return pathTo(currentNode);
+	                }
+
+	                // Normal case -- move currentNode from open to closed, process each of its neighbors.
+	                currentNode.closed = true;
+
+	                // Find all neighbors for the current node.
+	                var neighbors = graph.neighbors(currentNode);
+
+	                for (var i = 0, il = neighbors.length; i < il; ++i) {
+	                    var neighbor = neighbors[i];
+
+	                    if (neighbor.closed || neighbor.isWall()) {
+	                        // Not a valid node to process, skip to next neighbor.
+	                        continue;
+	                    }
+
+	                    // The g score is the shortest distance from start to current node.
+	                    // We need to check if the path we have arrived at this neighbor is the shortest one we have seen yet.
+	                    var gScore = currentNode.g + neighbor.getCost(currentNode),
+	                        beenVisited = neighbor.visited;
+
+	                    if (!beenVisited || gScore < neighbor.g) {
+
+	                        // Found an optimal (so far) path to this node.  Take score for node to see how good it is.
+	                        neighbor.visited = true;
+	                        neighbor.parent = currentNode;
+	                        neighbor.h = neighbor.h || heuristic(neighbor, end);
+	                        neighbor.g = gScore;
+	                        neighbor.f = neighbor.g + neighbor.h;
+	                        graph.markDirty(neighbor);
+	                        if (closest) {
+	                            // If the neighbour is closer than the current closestNode or if it's equally close but has
+	                            // a cheaper path than the current closest node then it becomes the closest node
+	                            if (neighbor.h < closestNode.h || neighbor.h === closestNode.h && neighbor.g < closestNode.g) {
+	                                closestNode = neighbor;
+	                            }
+	                        }
+
+	                        if (!beenVisited) {
+	                            // Pushing to heap will put it in proper place based on the 'f' value.
+	                            openHeap.push(neighbor);
+	                        } else {
+	                            // Already seen the node, but since it has been rescored we need to reorder it in the heap
+	                            openHeap.rescoreElement(neighbor);
+	                        }
+	                    }
+	                }
+	            }
+
+	            if (closest) {
+	                return pathTo(closestNode);
+	            }
+
+	            // No result was found - empty array signifies failure to find path.
+	            return [];
+	        },
+	        // See list of heuristics: http://theory.stanford.edu/~amitp/GameProgramming/Heuristics.html
+	        heuristics: {
+	            manhattan: function manhattan(pos0, pos1) {
+	                var d1 = Math.abs(pos1.x - pos0.x);
+	                var d2 = Math.abs(pos1.y - pos0.y);
+	                return d1 + d2;
+	            },
+	            diagonal: function diagonal(pos0, pos1) {
+	                var D = 1;
+	                var D2 = Math.sqrt(2);
+	                var d1 = Math.abs(pos1.x - pos0.x);
+	                var d2 = Math.abs(pos1.y - pos0.y);
+	                return D * (d1 + d2) + (D2 - 2 * D) * Math.min(d1, d2);
+	            }
+	        },
+	        cleanNode: function cleanNode(node) {
+	            node.f = 0;
+	            node.g = 0;
+	            node.h = 0;
+	            node.visited = false;
+	            node.closed = false;
+	            node.parent = null;
+	        }
+	    };
+
+	    /**
+	    * A graph memory structure
+	    * @param {Array} gridIn 2D array of input weights
+	    * @param {Object} [options]
+	    * @param {bool} [options.diagonal] Specifies whether diagonal moves are allowed
+	    */
+	    function Graph(gridIn, options) {
+	        options = options || {};
+	        this.nodes = [];
+	        this.diagonal = !!options.diagonal;
+	        this.grid = [];
+	        for (var x = 0; x < gridIn.length; x++) {
+	            this.grid[x] = [];
+
+	            for (var y = 0, row = gridIn[x]; y < row.length; y++) {
+	                var node = new GridNode(x, y, row[y]);
+	                this.grid[x][y] = node;
+	                this.nodes.push(node);
+	            }
+	        }
+	        this.init();
+	    }
+
+	    Graph.prototype.init = function () {
+	        this.dirtyNodes = [];
+	        for (var i = 0; i < this.nodes.length; i++) {
+	            astar.cleanNode(this.nodes[i]);
+	        }
+	    };
+
+	    Graph.prototype.cleanDirty = function () {
+	        for (var i = 0; i < this.dirtyNodes.length; i++) {
+	            astar.cleanNode(this.dirtyNodes[i]);
+	        }
+	        this.dirtyNodes = [];
+	    };
+
+	    Graph.prototype.markDirty = function (node) {
+	        this.dirtyNodes.push(node);
+	    };
+
+	    Graph.prototype.neighbors = function (node) {
+	        var ret = [],
+	            x = node.x,
+	            y = node.y,
+	            grid = this.grid;
+
+	        // West
+	        if (grid[x - 1] && grid[x - 1][y]) {
+	            ret.push(grid[x - 1][y]);
+	        }
+
+	        // East
+	        if (grid[x + 1] && grid[x + 1][y]) {
+	            ret.push(grid[x + 1][y]);
+	        }
+
+	        // South
+	        if (grid[x] && grid[x][y - 1]) {
+	            ret.push(grid[x][y - 1]);
+	        }
+
+	        // North
+	        if (grid[x] && grid[x][y + 1]) {
+	            ret.push(grid[x][y + 1]);
+	        }
+
+	        if (this.diagonal) {
+	            // Southwest
+	            if (grid[x - 1] && grid[x - 1][y - 1]) {
+	                ret.push(grid[x - 1][y - 1]);
+	            }
+
+	            // Southeast
+	            if (grid[x + 1] && grid[x + 1][y - 1]) {
+	                ret.push(grid[x + 1][y - 1]);
+	            }
+
+	            // Northwest
+	            if (grid[x - 1] && grid[x - 1][y + 1]) {
+	                ret.push(grid[x - 1][y + 1]);
+	            }
+
+	            // Northeast
+	            if (grid[x + 1] && grid[x + 1][y + 1]) {
+	                ret.push(grid[x + 1][y + 1]);
+	            }
+	        }
+
+	        return ret;
+	    };
+
+	    Graph.prototype.toString = function () {
+	        var graphString = [],
+	            nodes = this.grid,
+	            // when using grid
+	        rowDebug,
+	            row,
+	            y,
+	            l;
+	        for (var x = 0, len = nodes.length; x < len; x++) {
+	            rowDebug = [];
+	            row = nodes[x];
+	            for (y = 0, l = row.length; y < l; y++) {
+	                rowDebug.push(row[y].weight);
+	            }
+	            graphString.push(rowDebug.join(" "));
+	        }
+	        return graphString.join("\n");
+	    };
+
+	    function GridNode(x, y, weight) {
+	        this.x = x;
+	        this.y = y;
+	        this.weight = weight;
+	    }
+
+	    GridNode.prototype.toString = function () {
+	        return "[" + this.x + " " + this.y + "]";
+	    };
+
+	    GridNode.prototype.getCost = function (fromNeighbor) {
+	        // Take diagonal weight into consideration.
+	        if (fromNeighbor && fromNeighbor.x != this.x && fromNeighbor.y != this.y) {
+	            return this.weight * 1.41421;
+	        }
+	        return this.weight;
+	    };
+
+	    GridNode.prototype.isWall = function () {
+	        return this.weight === 0;
+	    };
+
+	    function BinaryHeap(scoreFunction) {
+	        this.content = [];
+	        this.scoreFunction = scoreFunction;
+	    }
+
+	    BinaryHeap.prototype = {
+	        push: function push(element) {
+	            // Add the new element to the end of the array.
+	            this.content.push(element);
+
+	            // Allow it to sink down.
+	            this.sinkDown(this.content.length - 1);
+	        },
+	        pop: function pop() {
+	            // Store the first element so we can return it later.
+	            var result = this.content[0];
+	            // Get the element at the end of the array.
+	            var end = this.content.pop();
+	            // If there are any elements left, put the end element at the
+	            // start, and let it bubble up.
+	            if (this.content.length > 0) {
+	                this.content[0] = end;
+	                this.bubbleUp(0);
+	            }
+	            return result;
+	        },
+	        remove: function remove(node) {
+	            var i = this.content.indexOf(node);
+
+	            // When it is found, the process seen in 'pop' is repeated
+	            // to fill up the hole.
+	            var end = this.content.pop();
+
+	            if (i !== this.content.length - 1) {
+	                this.content[i] = end;
+
+	                if (this.scoreFunction(end) < this.scoreFunction(node)) {
+	                    this.sinkDown(i);
+	                } else {
+	                    this.bubbleUp(i);
+	                }
+	            }
+	        },
+	        size: function size() {
+	            return this.content.length;
+	        },
+	        rescoreElement: function rescoreElement(node) {
+	            this.sinkDown(this.content.indexOf(node));
+	        },
+	        sinkDown: function sinkDown(n) {
+	            // Fetch the element that has to be sunk.
+	            var element = this.content[n];
+
+	            // When at 0, an element can not sink any further.
+	            while (n > 0) {
+
+	                // Compute the parent element's index, and fetch it.
+	                var parentN = (n + 1 >> 1) - 1,
+	                    parent = this.content[parentN];
+	                // Swap the elements if the parent is greater.
+	                if (this.scoreFunction(element) < this.scoreFunction(parent)) {
+	                    this.content[parentN] = element;
+	                    this.content[n] = parent;
+	                    // Update 'n' to continue at the new position.
+	                    n = parentN;
+	                }
+	                // Found a parent that is less, no need to sink any further.
+	                else {
+	                        break;
+	                    }
+	            }
+	        },
+	        bubbleUp: function bubbleUp(n) {
+	            // Look up the target element and its score.
+	            var length = this.content.length,
+	                element = this.content[n],
+	                elemScore = this.scoreFunction(element);
+
+	            while (true) {
+	                // Compute the indices of the child elements.
+	                var child2N = n + 1 << 1,
+	                    child1N = child2N - 1;
+	                // This is used to store the new position of the element, if any.
+	                var swap = null,
+	                    child1Score;
+	                // If the first child exists (is inside the array)...
+	                if (child1N < length) {
+	                    // Look it up and compute its score.
+	                    var child1 = this.content[child1N];
+	                    child1Score = this.scoreFunction(child1);
+
+	                    // If the score is less than our element's, we need to swap.
+	                    if (child1Score < elemScore) {
+	                        swap = child1N;
+	                    }
+	                }
+
+	                // Do the same checks for the other child.
+	                if (child2N < length) {
+	                    var child2 = this.content[child2N],
+	                        child2Score = this.scoreFunction(child2);
+	                    if (child2Score < (swap === null ? elemScore : child1Score)) {
+	                        swap = child2N;
+	                    }
+	                }
+
+	                // If the element needs to be moved, swap it, and continue.
+	                if (swap !== null) {
+	                    this.content[n] = this.content[swap];
+	                    this.content[swap] = element;
+	                    n = swap;
+	                }
+	                // Otherwise, we are done.
+	                else {
+	                        break;
+	                    }
+	            }
+	        }
+	    };
+
+	    return {
+	        astar: astar,
+	        Graph: Graph
+	    };
+	});
+	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(106)(module)))
 
 /***/ })
 /******/ ]);

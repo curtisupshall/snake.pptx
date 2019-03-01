@@ -14,4 +14,12 @@ export default class Coord {
 	distanceTo(coord: Coord): number {
 		return Math.abs(this.x - coord.x) + Math.abs(this.y - coord.y)
 	}
+
+	toArray(): number[] {
+		return [this.x, this.y]
+	}
+
+	toString(): string {
+		return '(' + this.x + ',' + this.y + ')'
+	}
 }
