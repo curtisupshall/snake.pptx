@@ -1,0 +1,10 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "module": "commonjs",
+    "lib": ["es6", "dom", "es2017"],
+    "target": "es5",
+    "noImplicitAny": false,
+    "sourceMap": false
+  }
+}
