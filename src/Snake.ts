@@ -18,13 +18,29 @@ export default class Snake {
         }, [])
     }
 
+    /**
+     * Determines if the given snakes has one of its body
+     * segments at the given coordinate.
+     * @param coord Coord to test.
+     * @return True if the snake has the coordinate, false otherwise.
+     */
     hasCoord(coord: Coord): boolean {
         return this.body.some((segment: Coord) => {
             return coord.equals(segment)
         })
     }
 
-    isAlive(): boolean {
-        return this.health > 0
+    // TODO
+    willDie(): boolean {
+        return false;
+    }
+
+    /**
+     * Determines if a snake will grow on the next turn. This
+     * is useful to know, since snakes that are growing will
+     * leave their tail behind for an additional turn.
+     */
+    willGrow(): boolean {
+        return this.health == 100
     }
 }

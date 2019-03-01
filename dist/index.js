@@ -19767,11 +19767,22 @@ module.exports =
 	    };
 	    var safeMoves = allMoves.reduce(function (arr, direction) {
 	        var coord = snake_utils_1.moveToCoord(me.body[0], direction);
-	        var isDummyHead = dummyHeads.every(function (dummyHead) {
-	            return coord.equals(dummyHead.coord);
+	        var isDummyHead = dummyHeads.some(function (dummyHead) {
+	            return coord.equals(dummyHead.coord) && dummyHead.avoid;
 	        });
-	        if (!isDummyHead && !ooB(coord) && !isSegment(coord)) {
+	        var isOoB = ooB(coord);
+	        var isASegment = isSegment(coord);
+	        if (!isDummyHead && !isOoB && !isASegment) {
 	            arr.push(direction);
+	        }
+	        console.log(direction);
+	        console.log('isDummyHead:', isDummyHead, ' isOoB:', isOoB, ' isSegment:', isASegment);
+	        return arr;
+	    }, []);
+	    console.log("Safe moves: ", safeMoves);
+	    var killMoves = dummyHeads.reduce(function (arr, dummyHead) {
+	        if (dummyHead.avoid === false) {
+	            arr.push(snake_utils_1.coordToMove(me.body[0], dummyHead.coord));
 	        }
 	        return arr;
 	    }, []);
