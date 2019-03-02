@@ -113,12 +113,13 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 	 * path to a desired coordinate. Target might include food (if we're
 	 * hungry), our own tail (stall for time), or an enemy snakes head
 	 * (going for a kill).
-	 * @param from The coordinate we're currently at.
 	 * @param to The coordinate we wish to reach.
+	 * @param from The coordinate we're currently at (defaults to our head).
 	 * @return The shortest path to the given point. An empty array
 	 * signifies no path could be found.
 	 */
-	const A_Star = (from: Coord, to: Coord): Coord[] => {
+	const targetPathfind = (to: Coord, from?: Coord): Coord[] => {
+		if (!from) from = me.body[0]
 		if (!to) {
 			// If we can't resolve our target, just return the start Coord.
 			return [from]
@@ -180,15 +181,25 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 	}, [])
 	
 	let closeFood = closest(me.body[0], food)
-	// Tail chase
-	//let head = me.body[0]
-	//let tail = me.body[-1]
-	//console.log('Head:'+head.toString()+' Tail:'+tail.toString())
-	//const pathToTail = A_Star(me.body[0], me.body[-1])
-	//console.log('Path to tail: ', pathToTail)
-	//const moveChoice = coordToMove(me.body[0], pathToTail[1])
 
-	const moveChoice = safeMoves[0]
+	console.log('dummyHeads:', dummyHeads)
+	
+	// Tail chase
+	// console.log('Turn:',requestData.turn)
+	let head: Coord = me.body[0]
+	let tail: Coord = me.getTail()
+	// console.log('Head:'+head.toString()+' Tail:'+tail.toString())
+	let targetPath = targetPathfind(tail)
+	if (me.isHungry()) {
+		targetPath = targetPathfind(closeFood)
+	}
+	let moveChoice = safeMoves[0]
+	if (targetPath.length) {
+		const moveToTail = coordToMove(me.body[0], targetPath[0])
+		if (safeMoves.includes(moveToTail)) moveChoice = moveToTail
+	}
+
+	//const moveChoice = safeMoves[0]
 	// Response data
 	const responseData: MoveResponseData = {
 		move: moveChoice,

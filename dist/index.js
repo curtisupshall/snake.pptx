@@ -19775,12 +19775,13 @@ module.exports =
 	     * path to a desired coordinate. Target might include food (if we're
 	     * hungry), our own tail (stall for time), or an enemy snakes head
 	     * (going for a kill).
-	     * @param from The coordinate we're currently at.
 	     * @param to The coordinate we wish to reach.
+	     * @param from The coordinate we're currently at (defaults to our head).
 	     * @return The shortest path to the given point. An empty array
 	     * signifies no path could be found.
 	     */
-	    var A_Star = function A_Star(from, to) {
+	    var targetPathfind = function targetPathfind(to, from) {
+	        if (!from) from = me.body[0];
 	        if (!to) {
 	            // If we can't resolve our target, just return the start Coord.
 	            return [from];
@@ -19842,14 +19843,22 @@ module.exports =
 	        return arr;
 	    }, []);
 	    var closeFood = snake_utils_1.closest(me.body[0], food);
+	    console.log('dummyHeads:', dummyHeads);
 	    // Tail chase
-	    //let head = me.body[0]
-	    //let tail = me.body[-1]
-	    //console.log('Head:'+head.toString()+' Tail:'+tail.toString())
-	    //const pathToTail = A_Star(me.body[0], me.body[-1])
-	    //console.log('Path to tail: ', pathToTail)
-	    //const moveChoice = coordToMove(me.body[0], pathToTail[1])
+	    // console.log('Turn:',requestData.turn)
+	    var head = me.body[0];
+	    var tail = me.getTail();
+	    // console.log('Head:'+head.toString()+' Tail:'+tail.toString())
+	    var targetPath = targetPathfind(tail);
+	    if (me.isHungry()) {
+	        targetPath = targetPathfind(closeFood);
+	    }
 	    var moveChoice = safeMoves[0];
+	    if (targetPath.length) {
+	        var moveToTail = snake_utils_1.coordToMove(me.body[0], targetPath[0]);
+	        if (safeMoves.includes(moveToTail)) moveChoice = moveToTail;
+	    }
+	    //const moveChoice = safeMoves[0]
 	    // Response data
 	    var responseData = {
 	        move: moveChoice,
@@ -19895,6 +19904,7 @@ module.exports =
 
 	Object.defineProperty(exports, "__esModule", { value: true });
 	var Coord_1 = __webpack_require__(129);
+	var snake_utils_1 = __webpack_require__(131);
 	var Snake = /** @class */function () {
 	    function Snake(snake) {
 	        this.id = snake.id;
@@ -19928,6 +19938,23 @@ module.exports =
 	     */
 	    Snake.prototype.willGrow = function () {
 	        return this.health == 100;
+	    };
+	    /**
+	     * Determines the location that the snake's tail had on
+	     * the previous turn (unless it just ate, in which case we get
+	     * the location from two turns ago).
+	     * @return The location its tail had
+	     */
+	    Snake.prototype.getTail = function () {
+	        var currentTail = this.body[this.body.length - 1];
+	        var nextTail = this.body[this.body.length - 2];
+	        return snake_utils_1.moveToCoord(currentTail, snake_utils_1.coordToMove(nextTail, currentTail));
+	    };
+	    /**
+	     * Determines if the snake should get some grub.
+	     */
+	    Snake.prototype.isHungry = function () {
+	        return this.health <= 50;
 	    };
 	    return Snake;
 	}();

@@ -1,4 +1,5 @@
 import Coord from './Coord'
+import {moveToCoord, coordToMove } from './utils/snake.utils'
 
 export default class Snake {
     id: string
@@ -42,5 +43,24 @@ export default class Snake {
      */
     willGrow(): boolean {
         return this.health == 100
+    }
+
+    /**
+     * Determines the location that the snake's tail had on 
+     * the previous turn (unless it just ate, in which case we get
+     * the location from two turns ago).
+     * @return The location its tail had
+     */
+    getTail(): Coord {
+        let currentTail = this.body[this.body.length - 1]
+        let nextTail = this.body[this.body.length - 2]
+        return moveToCoord(currentTail, coordToMove(nextTail, currentTail))
+    }
+
+    /**
+     * Determines if the snake should get some grub.
+     */
+    isHungry(): boolean {
+        return this.health <= 50
     }
 }
