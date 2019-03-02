@@ -19882,24 +19882,22 @@ module.exports =
 	    var prelimMove = false;
 	    var moveChoice = safeMoves[0];
 	    var head = me.getHead();
-	    var targetPath = []; /*
-	                         while (!finalMove) {
-	                         while (!prelimMove) {
-	                         if (targets.length) {
-	                         targetPath = targetPathfind(targets.shift())
-	                         console.log('Target path:', targetPath)
-	                         if (targetPath.length)	{
-	                         moveChoice = coordToMove(head, targetPath[0])
-	                         if (safeMoves.includes(moveChoice)) {
-	                         prelimMove = true
-	                         }
-	                         }
-	                         }
-	                         else break
-	                         }
-	                         finalMove = true
-	                         }
-	                         */
+	    var targetPath = [];
+	    while (!finalMove) {
+	        while (!prelimMove) {
+	            if (targets.length) {
+	                targetPath = targetPathfind(targets.shift());
+	                console.log('Target path:', targetPath);
+	                if (targetPath.length) {
+	                    moveChoice = snake_utils_1.coordToMove(head, targetPath[0]);
+	                    if (safeMoves.includes(moveChoice)) {
+	                        prelimMove = true;
+	                    }
+	                }
+	            } else break;
+	        }
+	        finalMove = true;
+	    }
 	    console.log('Safe moves', safeMoves);
 	    console.log('Move choice', moveChoice);
 	    // Response data

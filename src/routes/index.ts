@@ -229,7 +229,7 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 	let prelimMove = false
 	let moveChoice = safeMoves[0]
 	let head = me.getHead()
-	let targetPath: Coord[] = []/*
+	let targetPath: Coord[] = []
 	while (!finalMove) {
 		while (!prelimMove) {
 			if (targets.length) {
@@ -246,7 +246,7 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 		}
 		finalMove = true
 	}
-	*/
+
 	console.log('Safe moves', safeMoves)
 	console.log('Move choice', moveChoice)
 	// Response data
