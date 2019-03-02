@@ -1,6 +1,6 @@
 import * as express from "express"
 import {
-	Move, StartRequest, DummyHead, MoveRequest, StartResponse,
+	Move, StartRequest, DummyHead, Target, MoveRequest, StartResponse,
 	MoveResponse, MoveResponseData, StartResponseData, EndRequest, EndRequestData
 } from "../types/battlesnake"
 import Coord from '../Coord'
@@ -49,10 +49,22 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 		height: requestData.board.height
 	}
 	const me: Snake = new Snake(requestData.you)
-	const enemies: Snake[] = requestData.board.snakes.reduce((arr, snake) => {
+	const enemies: Snake[] = requestData.board.snakes.reduce((arr: Snake[], snake: Snake) => {
 		if (snake.id !== me.id) arr.push(new Snake(snake))
 		return arr
 	}, [])
+
+	/**
+	 * Determines whether or not a given coordinate is out-of-bounds.
+	 * @param coord The coordinate we're testing.
+	 * @return True if it's out-of-bounds (should avoid), false otherwise.
+	 */
+	const ooB = (coord: Coord): boolean => {
+		return coord.x < 0
+			|| coord.x >= arena.width
+			|| coord.y < 0
+			|| coord.y >= arena.width
+	}
 
 	/**
 	 * An array of DummyHeads - coordinates which an enemy snake *may* move into
@@ -64,10 +76,12 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 		let head: Coord = snake.body[0]
 		dummies.push(...allMoves.reduce((directions: DummyHead[], dir: Move) => {
 			let step: Coord = moveToCoord(head, dir)
-			if (!snake.hasCoord(step)) directions.push({
-				coord: step,
-				avoid: snake.body.length >= me.body.length
-			})
+			if (!snake.hasCoord(step) && !ooB(step)) {
+				directions.push({
+					coord: step,
+					avoid: snake.body.length >= me.body.length
+				})
+			}
 			return directions
 		}, []))
 		return dummies
@@ -81,45 +95,46 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 		let head = me.getHead()
 		return head.distanceTo(a) - head.distanceTo(b)
 	})
-	
+	console.log('Turn: ', requestData.turn)
 	/**
 	 * A 2D array of weights used for Floodfill and A*.
 	 * 0 denotes a wall, and 1 denotes a free space.
 	 */
 	let grid: Array<Array<number>> = []
 	// Fill our array with 1's (empty space)
-	for (let i: number = 0; i < arena.width; i ++) {
+	for (let i = 0; i < arena.width; i ++) {
 		grid[i] = []
-		for (let j: number = 0; j < arena.height; j ++) grid[i][j] = 1
+		for (let j = 0; j < arena.height; j ++) {
+			grid[i][j] = 1
+		}
 	}
-	let snakes = enemies.concat(me)
+	let snakes: Snake[] = enemies
+	snakes.push(me)
+
 	// We wish to fill in our grid with zeros wherever we see
-	// a snake segment, denoting "walls" for our A* algorithm 
+	// a snake segment, denoting "walls" for our A* algorithm
+	//console.log('Parsing # of snakes:'+snakes.length) 
 	for (let i = 0; i < snakes.length; i ++) {
+		//console.log('parsing ' + snakes[i].name +"'s "+ (snakes[i].body.length) + ' segs')
 		for (let j = 0; j < snakes[i].body.length - 1; j ++) {
+			//console.log('inspecting '+snakes[i].name+"'s seg:" + snakes[i].body[j].toString())
 			grid[snakes[i].body[j].x][snakes[i].body[j].y] = 0
 		}
-		// Add dummy heads
-		for (let i = 0; i < dummyHeads.length; i ++) {
-			if (dummyHeads[i].avoid) grid[dummyHeads[i].coord.x][dummyHeads[i].coord.y] = 0
-		}
+
 		if (snakes[i].willGrow()) {
 			let tail = snakes[i].getTail()
 			grid[tail.x][tail.y] = 0
 		}
+		//console.log('parsing ' + snakes[i].name +"'s tail")
 	}
-
-	/**
-	 * Determines whether or not a given coordinate is out-of-bounds.
-	 * @param coord The coordinate we're testing.
-	 * @return True if it's out-of-bounds (should avoid), false otherwise.
-	 */
-	const ooB = (coord: Coord): boolean => {
-		return coord.x < 0
-			|| coord.x >= arena.width
-			|| coord.y < 0
-			|| coord.y >= arena.width
+	//console.log('about to parse dummyHeads:', dummyHeads)
+	// Add dummy heads
+	for (let k = 0; k < dummyHeads.length; k ++) {
+		if (dummyHeads[k].avoid) {
+			grid[dummyHeads[k].coord.x][dummyHeads[k].coord.y] = 0
+		}
 	}
+	//console.log('parsed dummy heads')
 
 	/**
 	 * Determines if a given coordinate is occupied by part of
@@ -163,29 +178,6 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 		return path.map((gridNode) => new Coord(gridNode.x, gridNode.y))
 	}
 
-	const floodFill = (to: Coord, from?: Coord, visited?: Coord[]) => {
-		if (!from) from = me.getHead()
-		if (!visited) visited = []
-
-		let x = from.x
-		let y = from.y
-
-		if (from.equals(to)) return true
-		if (ooB(from)) return false
-		for (let i = 0; i < visited.length; i ++) {
-			if (from.equals(visited[i])) return false
-		}
-		if (grid[x][y] === 0) return false
-
-		visited.push(from)
-
-		if (floodFill(to, new Coord(x + 1, y), visited)) return true
-		if (floodFill(to, new Coord(x - 1, y), visited)) return true
-		if (floodFill(to, new Coord(x, y + 1), visited)) return true
-		if (floodFill(to, new Coord(x, y - 1), visited)) return true
-		return false
-	}
-
 	/**
 	 * An array of moves that are guarenteed to *at least*
 	 * keep us alive for the next turn. Does not guarentee that
@@ -218,15 +210,25 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 	/**
 	 * A prioritized list of target Coords
 	 */
-	let targets: Coord[] = []
+	let targets: Target[] = []
 	
 	if (killCoords.length) {
-		targets = targets.concat(killCoords)
+		for (let i = 0; i < killCoords.length; i ++) {
+			targets.push({coord: killCoords[i], name: 'killCoord '+killCoords[i].toString()})
+		}
 	}
 	if (needFood()) {
-		targets = targets.concat(food).concat(me.getTail())
+		for (let i = 0; i < food.length; i ++) {
+			targets.push({coord: food[i], name: 'Food '+food[i].toString()})
+		}
+		targets.push({coord: me.getTail(), name: 'Our tail '+me.getTail().toString()})
 	}
-	else targets = targets.concat(me.getTail()).concat(food)
+	else {
+		targets.push({coord: me.getTail(), name: 'Our tail '+me.getTail().toString()})
+		for (let i = 0; i < food.length; i ++) {
+			targets.push({coord: food[i], name: 'Food '+food[i].toString()})
+		}
+	}
 	
 	// We decided our final move based on target priority list
 	let finalMove = false
@@ -237,7 +239,9 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 	while (!finalMove) {
 		while (!prelimMove) {
 			if (targets.length) {
-				targetPath = targetPathfind(targets.shift())
+				let target = targets.shift()
+				console.log('Current target: '+ target.name)
+				targetPath = targetPathfind(target.coord)
 				console.log('Target path:', targetPath)
 				if (targetPath.length)	{
 					moveChoice = coordToMove(head, targetPath[0])
@@ -246,7 +250,10 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 					}
 				}
 			}
-			else break			
+			else {
+				console.log('Ran out of targets!')
+				break
+			}
 		}
 		finalMove = true
 	}

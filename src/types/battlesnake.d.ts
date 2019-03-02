@@ -108,3 +108,8 @@ export interface DummyHead {
     coord: Coord
     avoid: boolean
 }
+
+export interface Target {
+    coord: Coord
+    name: string
+}

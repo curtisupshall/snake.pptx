@@ -19693,7 +19693,7 @@ module.exports =
 	var router = express.Router();
 	router.post('/start', function (req, res) {
 	    var responseData = {
-	        color: "#FF0000",
+	        color: "#CB4A32",
 	        headType: 'tongue',
 	        tailType: 'bolt'
 	    };
@@ -19721,6 +19721,14 @@ module.exports =
 	        return arr;
 	    }, []);
 	    /**
+	     * Determines whether or not a given coordinate is out-of-bounds.
+	     * @param coord The coordinate we're testing.
+	     * @return True if it's out-of-bounds (should avoid), false otherwise.
+	     */
+	    var ooB = function ooB(coord) {
+	        return coord.x < 0 || coord.x >= arena.width || coord.y < 0 || coord.y >= arena.width;
+	    };
+	    /**
 	     * An array of DummyHeads - coordinates which an enemy snake *may* move into
 	     * on the next turn. Since moving to a Dummy Head square might net us a kill,
 	     * the *avoid* paramter tells us whether or not we should avoid that coordinate.
@@ -19730,10 +19738,12 @@ module.exports =
 	        var head = snake.body[0];
 	        dummies.push.apply(dummies, allMoves.reduce(function (directions, dir) {
 	            var step = snake_utils_1.moveToCoord(head, dir);
-	            if (!snake.hasCoord(step)) directions.push({
-	                coord: step,
-	                avoid: snake.body.length >= me.body.length
-	            });
+	            if (!snake.hasCoord(step) && !ooB(step)) {
+	                directions.push({
+	                    coord: step,
+	                    avoid: snake.body.length >= me.body.length
+	                });
+	            }
 	            return directions;
 	        }, []));
 	        return dummies;
@@ -19748,6 +19758,7 @@ module.exports =
 	        var head = me.getHead();
 	        return head.distanceTo(a) - head.distanceTo(b);
 	    });
+	    console.log('Turn: ', requestData.turn);
 	    /**
 	     * A 2D array of weights used for Floodfill and A*.
 	     * 0 denotes a wall, and 1 denotes a free space.
@@ -19760,26 +19771,31 @@ module.exports =
 	            grid[i][j] = 1;
 	        }
 	    }
-	    var snakes = enemies.concat(me);
+	    var snakes = enemies;
+	    snakes.push(me);
 	    // We wish to fill in our grid with zeros wherever we see
-	    // a snake segment, denoting "walls" for our A* algorithm 
+	    // a snake segment, denoting "walls" for our A* algorithm
+	    //console.log('Parsing # of snakes:'+snakes.length) 
 	    for (var i = 0; i < snakes.length; i++) {
+	        //console.log('parsing ' + snakes[i].name +"'s "+ (snakes[i].body.length) + ' segs')
 	        for (var j = 0; j < snakes[i].body.length - 1; j++) {
+	            //console.log('inspecting '+snakes[i].name+"'s seg:" + snakes[i].body[j].toString())
 	            grid[snakes[i].body[j].x][snakes[i].body[j].y] = 0;
 	        }
 	        if (snakes[i].willGrow()) {
 	            var tail = snakes[i].getTail();
 	            grid[tail.x][tail.y] = 0;
 	        }
+	        //console.log('parsing ' + snakes[i].name +"'s tail")
 	    }
-	    /**
-	     * Determines whether or not a given coordinate is out-of-bounds.
-	     * @param coord The coordinate we're testing.
-	     * @return True if it's out-of-bounds (should avoid), false otherwise.
-	     */
-	    var ooB = function ooB(coord) {
-	        return coord.x < 0 || coord.x >= arena.width || coord.y < 0 || coord.y >= arena.width;
-	    };
+	    //console.log('about to parse dummyHeads:', dummyHeads)
+	    // Add dummy heads
+	    for (var k = 0; k < dummyHeads.length; k++) {
+	        if (dummyHeads[k].avoid) {
+	            grid[dummyHeads[k].coord.x][dummyHeads[k].coord.y] = 0;
+	        }
+	    }
+	    //console.log('parsed dummy heads')
 	    /**
 	     * Determines if a given coordinate is occupied by part of
 	     * another snakes body, including out own.
@@ -19822,24 +19838,6 @@ module.exports =
 	            return new Coord_1.default(gridNode.x, gridNode.y);
 	        });
 	    };
-	    var floodFill = function floodFill(to, from, visited) {
-	        if (!from) from = me.getHead();
-	        if (!visited) visited = [];
-	        var x = from.x;
-	        var y = from.y;
-	        if (from.equals(to)) return true;
-	        if (ooB(from)) return false;
-	        for (var i = 0; i < visited.length; i++) {
-	            if (from.equals(visited[i])) return false;
-	        }
-	        if (grid[x][y] === 0) return false;
-	        visited.push(from);
-	        if (floodFill(to, new Coord_1.default(x + 1, y), visited)) return true;
-	        if (floodFill(to, new Coord_1.default(x - 1, y), visited)) return true;
-	        if (floodFill(to, new Coord_1.default(x, y + 1), visited)) return true;
-	        if (floodFill(to, new Coord_1.default(x, y - 1), visited)) return true;
-	        return false;
-	    };
 	    /**
 	     * An array of moves that are guarenteed to *at least*
 	     * keep us alive for the next turn. Does not guarentee that
@@ -19872,11 +19870,21 @@ module.exports =
 	     */
 	    var targets = [];
 	    if (killCoords.length) {
-	        targets = targets.concat(killCoords);
+	        for (var i = 0; i < killCoords.length; i++) {
+	            targets.push({ coord: killCoords[i], name: 'killCoord ' + killCoords[i].toString() });
+	        }
 	    }
 	    if (needFood()) {
-	        targets = targets.concat(food).concat(me.getTail());
-	    } else targets = targets.concat(me.getTail()).concat(food);
+	        for (var i = 0; i < food.length; i++) {
+	            targets.push({ coord: food[i], name: 'Food ' + food[i].toString() });
+	        }
+	        targets.push({ coord: me.getTail(), name: 'Our tail ' + me.getTail().toString() });
+	    } else {
+	        targets.push({ coord: me.getTail(), name: 'Our tail ' + me.getTail().toString() });
+	        for (var i = 0; i < food.length; i++) {
+	            targets.push({ coord: food[i], name: 'Food ' + food[i].toString() });
+	        }
+	    }
 	    // We decided our final move based on target priority list
 	    var finalMove = false;
 	    var prelimMove = false;
@@ -19886,7 +19894,9 @@ module.exports =
 	    while (!finalMove) {
 	        while (!prelimMove) {
 	            if (targets.length) {
-	                targetPath = targetPathfind(targets.shift());
+	                var target = targets.shift();
+	                console.log('Current target: ' + target.name);
+	                targetPath = targetPathfind(target.coord);
 	                console.log('Target path:', targetPath);
 	                if (targetPath.length) {
 	                    moveChoice = snake_utils_1.coordToMove(head, targetPath[0]);
@@ -19894,7 +19904,10 @@ module.exports =
 	                        prelimMove = true;
 	                    }
 	                }
-	            } else break;
+	            } else {
+	                console.log('Ran out of targets!');
+	                break;
+	            }
 	        }
 	        finalMove = true;
 	    }
