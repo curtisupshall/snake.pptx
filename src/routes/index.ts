@@ -22,7 +22,7 @@ const router: BattleSnakeRouter = express.Router()
 router.post('/start', (req: StartRequest, res: StartResponse): StartResponse => {
 
 	const responseData: StartResponseData = {
-		color: "#FF0000",
+		color: "#CB4A32",
 		headType: 'tongue',
 		tailType: 'bolt'
 	}
@@ -98,6 +98,10 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 	for (let i = 0; i < snakes.length; i ++) {
 		for (let j = 0; j < snakes[i].body.length - 1; j ++) {
 			grid[snakes[i].body[j].x][snakes[i].body[j].y] = 0
+		}
+		// Add dummy heads
+		for (let i = 0; i < dummyHeads.length; i ++) {
+			if (dummyHeads[i].avoid) grid[dummyHeads[i].coord.x][dummyHeads[i].coord.y] = 0
 		}
 		if (snakes[i].willGrow()) {
 			let tail = snakes[i].getTail()
