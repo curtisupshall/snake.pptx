@@ -91,7 +91,6 @@ export type Move = "up" | "down" | "left" | "right"
 
 export interface MoveResponseData {
     move: Move
-    taunt?: string
 }
 
 export interface Game {

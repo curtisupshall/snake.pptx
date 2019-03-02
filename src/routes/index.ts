@@ -229,27 +229,29 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 	let prelimMove = false
 	let moveChoice = safeMoves[0]
 	let head = me.getHead()
-	let targetPath: Coord[]
+	let targetPath: Coord[] = []/*
 	while (!finalMove) {
 		while (!prelimMove) {
-			targetPath = targetPathfind(targets.shift())
-			console.log('Target path:', targetPath)
-			if (targetPath.length)	{
-				moveChoice = coordToMove(head, targetPath[0])
-				if (safeMoves.includes(moveChoice)) {
-					prelimMove = true
+			if (targets.length) {
+				targetPath = targetPathfind(targets.shift())
+				console.log('Target path:', targetPath)
+				if (targetPath.length)	{
+					moveChoice = coordToMove(head, targetPath[0])
+					if (safeMoves.includes(moveChoice)) {
+						prelimMove = true
+					}
 				}
 			}
+			else break			
 		}
 		finalMove = true
 	}
-	
+	*/
 	console.log('Safe moves', safeMoves)
 	console.log('Move choice', moveChoice)
 	// Response data
 	const responseData: MoveResponseData = {
-		move: moveChoice,
-		taunt: ''
+		move: moveChoice
 	}
 	
 	return res.json(responseData)
