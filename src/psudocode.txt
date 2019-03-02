@@ -1,0 +1,17 @@
+let safeMoves[]
+let targets[]
+let prelimMove = false
+let finalMove = false
+
+while (!finalMove):
+	while (!prelimMove):
+		let targetPath = Astar(targets.shift(0)) // use first target + remove it
+		let moveChoice = targetPath[0]
+		if (safeMoves includes moveChoice):
+			prelimMove = true // we have a preliminary move
+	let floodPath = floodfill()
+	if (me.length <= floodPath.length)
+		finalMove = true
+	else
+		prelimMove = false
+

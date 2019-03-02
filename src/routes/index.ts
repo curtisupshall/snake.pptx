@@ -6,6 +6,7 @@ import {
 import Coord from '../Coord'
 import Snake from '../Snake'
 import { moveToCoord, coordToMove, closest } from '../utils/snake.utils'
+import { json } from "body-parser";
 
 const astar = require('javascript-astar')
 
@@ -29,12 +30,14 @@ router.post('/start', (req: StartRequest, res: StartResponse): StartResponse => 
 	return res.json(responseData)
 })
 
-router.post('/end', (req: EndRequest, res: any): void => {
+router.post('/end', (req: any, res: any): any => {
 	res.status(200)
+	return res.json()
 })
 
-router.post('/ping', ( res: any): void => {
+router.post('/ping', (req: any, res: any): any => {
 	res.status(200)
+	return res.json()
 })
 
 // Handle POST request to '/move'
@@ -50,7 +53,7 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 		if (snake.id !== me.id) arr.push(new Snake(snake))
 		return arr
 	}, [])
-	
+
 	/**
 	 * An array of DummyHeads - coordinates which an enemy snake *may* move into
 	 * on the next turn. Since moving to a Dummy Head square might net us a kill,
@@ -69,8 +72,39 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 		}, []))
 		return dummies
 	}, [])
-	const food = requestData.board.food.map(food => new Coord(food.x, food.y))
+
+	/**
+	 * An array of food on the board, sorted in ascending 
+	 * order by distance its distance to us.
+	 */
+	const food = requestData.board.food.map(food => new Coord(food.x, food.y)).sort((a, b) => {
+		let head = me.getHead()
+		return head.distanceTo(a) - head.distanceTo(b)
+	})
 	
+	/**
+	 * A 2D array of weights used for Floodfill and A*.
+	 * 0 denotes a wall, and 1 denotes a free space.
+	 */
+	let grid: Array<Array<number>> = []
+	// Fill our array with 1's (empty space)
+	for (let i: number = 0; i < arena.width; i ++) {
+		grid[i] = []
+		for (let j: number = 0; j < arena.height; j ++) grid[i][j] = 1
+	}
+	let snakes = enemies.concat(me)
+	// We wish to fill in our grid with zeros wherever we see
+	// a snake segment, denoting "walls" for our A* algorithm 
+	for (let i = 0; i < snakes.length; i ++) {
+		for (let j = 0; j < snakes[i].body.length - 1; j ++) {
+			grid[snakes[i].body[j].x][snakes[i].body[j].y] = 0
+		}
+		if (snakes[i].willGrow()) {
+			let tail = snakes[i].getTail()
+			grid[tail.x][tail.y] = 0
+		}
+	}
+
 	/**
 	 * Determines whether or not a given coordinate is out-of-bounds.
 	 * @param coord The coordinate we're testing.
@@ -96,18 +130,11 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 	}
 
 	/**
-	 * Determines whether or not a given coordinate has a piece
-	 * of food located there.
-	 * @param coord The coordinate to test.
-	 * @return True if there's food there, false otherwise.
+	 * Determines if we should go for food or not.
 	 */
-	const isFood = (coord: Coord): boolean => {
-		for (let i = 0; i < food.length; i ++) {
-			if (food[i].equals(coord)) return true
-		}
-		return false
+	const needFood = (): boolean => {
+		return me.isHungry() || !me.hasEvenLength()
 	}
-
 	/**
 	 * Helper method for using the A* library, which gives us the shortest
 	 * path to a desired coordinate. Target might include food (if we're
@@ -124,27 +151,35 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 			// If we can't resolve our target, just return the start Coord.
 			return [from]
 		}
-		// Builds a grid array that the A* library will accept
-		let grid: Array<Array<number>> = []
-		// Fill our array with 1's (empty space)
-		for (let i: number = 0; i < arena.width; i ++) {
-			grid[i] = []
-			for (let j: number = 0; j < arena.height; j ++) grid[i][j] = 1
-		}
-		let snakes = enemies.concat(me)
-		// We wish to fill in our grid with zeros wherever we see
-		// a snake segment, denoting "walls" for our A* algorithm 
-		for (let i = 0; i < snakes.length; i ++) {
-			for (let j = 0; j < snakes[i].body.length; j ++) {
-				grid[snakes[i].body[j].x][snakes[i].body[j].y] = 0
-			}
-		}
 		let graph = new astar.Graph(grid)
 		let start = graph.grid[from.x][from.y]
 		let end = graph.grid[to.x][to.y]
 		let path = astar.astar.search(graph, start, end)
 		// Return array of Coord objects, denoting the path to take
 		return path.map((gridNode) => new Coord(gridNode.x, gridNode.y))
+	}
+
+	const floodFill = (to: Coord, from?: Coord, visited?: Coord[]) => {
+		if (!from) from = me.getHead()
+		if (!visited) visited = []
+
+		let x = from.x
+		let y = from.y
+
+		if (from.equals(to)) return true
+		if (ooB(from)) return false
+		for (let i = 0; i < visited.length; i ++) {
+			if (from.equals(visited[i])) return false
+		}
+		if (grid[x][y] === 0) return false
+
+		visited.push(from)
+
+		if (floodFill(to, new Coord(x + 1, y), visited)) return true
+		if (floodFill(to, new Coord(x - 1, y), visited)) return true
+		if (floodFill(to, new Coord(x, y + 1), visited)) return true
+		if (floodFill(to, new Coord(x, y - 1), visited)) return true
+		return false
 	}
 
 	/**
@@ -162,44 +197,55 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 		if ( !isDummyHead && !isOoB && !isASegment ) {
 			arr.push(direction)
 		}
-		//console.log(direction)
-		//console.log('isDummyHead:', isDummyHead, ' isOoB:', isOoB, ' isSegment:', isASegment)
 		return arr
 	}, [])
-	
-	//console.log("Safe moves: ", safeMoves)
 
 	/**
-	 * An array of moves that, should we follow it, will kill another
+	 * An array of Coords that, should we follow one, will kill another
 	 * snake on the board.
 	 */
-	const killMoves: Move[] = dummyHeads.reduce((arr: Move[], dummyHead: DummyHead) => {
+	const killCoords: Coord[] = dummyHeads.reduce((arr: Coord[], dummyHead: DummyHead) => {
 		if (dummyHead.avoid === false) {
-			arr.push(coordToMove(me.body[0], dummyHead.coord))
+			arr.push(dummyHead.coord)
 		}
 		return arr
 	}, [])
-	
-	let closeFood = closest(me.body[0], food)
 
-	console.log('dummyHeads:', dummyHeads)
+	/**
+	 * A prioritized list of target Coords
+	 */
+	let targets: Coord[] = []
 	
-	// Tail chase
-	// console.log('Turn:',requestData.turn)
-	let head: Coord = me.body[0]
-	let tail: Coord = me.getTail()
-	// console.log('Head:'+head.toString()+' Tail:'+tail.toString())
-	let targetPath = targetPathfind(tail)
-	if (me.isHungry()) {
-		targetPath = targetPathfind(closeFood)
+	if (killCoords.length) {
+		targets = targets.concat(killCoords)
 	}
+	if (needFood()) {
+		targets = targets.concat(food).concat(me.getTail())
+	}
+	else targets = targets.concat(me.getTail()).concat(food)
+	
+	// We decided our final move based on target priority list
+	let finalMove = false
+	let prelimMove = false
 	let moveChoice = safeMoves[0]
-	if (targetPath.length) {
-		const moveToTail = coordToMove(me.body[0], targetPath[0])
-		if (safeMoves.includes(moveToTail)) moveChoice = moveToTail
+	let head = me.getHead()
+	let targetPath: Coord[]
+	while (!finalMove) {
+		while (!prelimMove) {
+			targetPath = targetPathfind(targets.shift())
+			console.log('Target path:', targetPath)
+			if (targetPath.length)	{
+				moveChoice = coordToMove(head, targetPath[0])
+				if (safeMoves.includes(moveChoice)) {
+					prelimMove = true
+				}
+			}
+		}
+		finalMove = true
 	}
-
-	//const moveChoice = safeMoves[0]
+	
+	console.log('Safe moves', safeMoves)
+	console.log('Move choice', moveChoice)
 	// Response data
 	const responseData: MoveResponseData = {
 		move: moveChoice,

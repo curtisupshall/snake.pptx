@@ -19701,9 +19701,11 @@ module.exports =
 	});
 	router.post('/end', function (req, res) {
 	    res.status(200);
+	    return res.json();
 	});
-	router.post('/ping', function (res) {
+	router.post('/ping', function (req, res) {
 	    res.status(200);
+	    return res.json();
 	});
 	// Handle POST request to '/move'
 	router.post('/move', function (req, res) {
@@ -19736,9 +19738,40 @@ module.exports =
 	        }, []));
 	        return dummies;
 	    }, []);
+	    /**
+	     * An array of food on the board, sorted in ascending
+	     * order by distance its distance to us.
+	     */
 	    var food = requestData.board.food.map(function (food) {
 	        return new Coord_1.default(food.x, food.y);
+	    }).sort(function (a, b) {
+	        var head = me.getHead();
+	        return head.distanceTo(a) - head.distanceTo(b);
 	    });
+	    /**
+	     * A 2D array of weights used for Floodfill and A*.
+	     * 0 denotes a wall, and 1 denotes a free space.
+	     */
+	    var grid = [];
+	    // Fill our array with 1's (empty space)
+	    for (var i = 0; i < arena.width; i++) {
+	        grid[i] = [];
+	        for (var j = 0; j < arena.height; j++) {
+	            grid[i][j] = 1;
+	        }
+	    }
+	    var snakes = enemies.concat(me);
+	    // We wish to fill in our grid with zeros wherever we see
+	    // a snake segment, denoting "walls" for our A* algorithm 
+	    for (var i = 0; i < snakes.length; i++) {
+	        for (var j = 0; j < snakes[i].body.length - 1; j++) {
+	            grid[snakes[i].body[j].x][snakes[i].body[j].y] = 0;
+	        }
+	        if (snakes[i].willGrow()) {
+	            var tail = snakes[i].getTail();
+	            grid[tail.x][tail.y] = 0;
+	        }
+	    }
 	    /**
 	     * Determines whether or not a given coordinate is out-of-bounds.
 	     * @param coord The coordinate we're testing.
@@ -19759,16 +19792,10 @@ module.exports =
 	        });
 	    };
 	    /**
-	     * Determines whether or not a given coordinate has a piece
-	     * of food located there.
-	     * @param coord The coordinate to test.
-	     * @return True if there's food there, false otherwise.
+	     * Determines if we should go for food or not.
 	     */
-	    var isFood = function isFood(coord) {
-	        for (var i = 0; i < food.length; i++) {
-	            if (food[i].equals(coord)) return true;
-	        }
-	        return false;
+	    var needFood = function needFood() {
+	        return me.isHungry() || !me.hasEvenLength();
 	    };
 	    /**
 	     * Helper method for using the A* library, which gives us the shortest
@@ -19786,23 +19813,6 @@ module.exports =
 	            // If we can't resolve our target, just return the start Coord.
 	            return [from];
 	        }
-	        // Builds a grid array that the A* library will accept
-	        var grid = [];
-	        // Fill our array with 1's (empty space)
-	        for (var i = 0; i < arena.width; i++) {
-	            grid[i] = [];
-	            for (var j = 0; j < arena.height; j++) {
-	                grid[i][j] = 1;
-	            }
-	        }
-	        var snakes = enemies.concat(me);
-	        // We wish to fill in our grid with zeros wherever we see
-	        // a snake segment, denoting "walls" for our A* algorithm 
-	        for (var i = 0; i < snakes.length; i++) {
-	            for (var j = 0; j < snakes[i].body.length; j++) {
-	                grid[snakes[i].body[j].x][snakes[i].body[j].y] = 0;
-	            }
-	        }
 	        var graph = new astar.Graph(grid);
 	        var start = graph.grid[from.x][from.y];
 	        var end = graph.grid[to.x][to.y];
@@ -19811,6 +19821,24 @@ module.exports =
 	        return path.map(function (gridNode) {
 	            return new Coord_1.default(gridNode.x, gridNode.y);
 	        });
+	    };
+	    var floodFill = function floodFill(to, from, visited) {
+	        if (!from) from = me.getHead();
+	        if (!visited) visited = [];
+	        var x = from.x;
+	        var y = from.y;
+	        if (from.equals(to)) return true;
+	        if (ooB(from)) return false;
+	        for (var i = 0; i < visited.length; i++) {
+	            if (from.equals(visited[i])) return false;
+	        }
+	        if (grid[x][y] === 0) return false;
+	        visited.push(from);
+	        if (floodFill(to, new Coord_1.default(x + 1, y), visited)) return true;
+	        if (floodFill(to, new Coord_1.default(x - 1, y), visited)) return true;
+	        if (floodFill(to, new Coord_1.default(x, y + 1), visited)) return true;
+	        if (floodFill(to, new Coord_1.default(x, y - 1), visited)) return true;
+	        return false;
 	    };
 	    /**
 	     * An array of moves that are guarenteed to *at least*
@@ -19827,38 +19855,49 @@ module.exports =
 	        if (!isDummyHead && !isOoB && !isASegment) {
 	            arr.push(direction);
 	        }
-	        //console.log(direction)
-	        //console.log('isDummyHead:', isDummyHead, ' isOoB:', isOoB, ' isSegment:', isASegment)
 	        return arr;
 	    }, []);
-	    //console.log("Safe moves: ", safeMoves)
 	    /**
-	     * An array of moves that, should we follow it, will kill another
+	     * An array of Coords that, should we follow one, will kill another
 	     * snake on the board.
 	     */
-	    var killMoves = dummyHeads.reduce(function (arr, dummyHead) {
+	    var killCoords = dummyHeads.reduce(function (arr, dummyHead) {
 	        if (dummyHead.avoid === false) {
-	            arr.push(snake_utils_1.coordToMove(me.body[0], dummyHead.coord));
+	            arr.push(dummyHead.coord);
 	        }
 	        return arr;
 	    }, []);
-	    var closeFood = snake_utils_1.closest(me.body[0], food);
-	    console.log('dummyHeads:', dummyHeads);
-	    // Tail chase
-	    // console.log('Turn:',requestData.turn)
-	    var head = me.body[0];
-	    var tail = me.getTail();
-	    // console.log('Head:'+head.toString()+' Tail:'+tail.toString())
-	    var targetPath = targetPathfind(tail);
-	    if (me.isHungry()) {
-	        targetPath = targetPathfind(closeFood);
+	    /**
+	     * A prioritized list of target Coords
+	     */
+	    var targets = [];
+	    if (killCoords.length) {
+	        targets = targets.concat(killCoords);
 	    }
+	    if (needFood()) {
+	        targets = targets.concat(food).concat(me.getTail());
+	    } else targets = targets.concat(me.getTail()).concat(food);
+	    // We decided our final move based on target priority list
+	    var finalMove = false;
+	    var prelimMove = false;
 	    var moveChoice = safeMoves[0];
-	    if (targetPath.length) {
-	        var moveToTail = snake_utils_1.coordToMove(me.body[0], targetPath[0]);
-	        if (safeMoves.includes(moveToTail)) moveChoice = moveToTail;
+	    var head = me.getHead();
+	    var targetPath;
+	    while (!finalMove) {
+	        while (!prelimMove) {
+	            targetPath = targetPathfind(targets.shift());
+	            console.log('Target path:', targetPath);
+	            if (targetPath.length) {
+	                moveChoice = snake_utils_1.coordToMove(head, targetPath[0]);
+	                if (safeMoves.includes(moveChoice)) {
+	                    prelimMove = true;
+	                }
+	            }
+	        }
+	        finalMove = true;
 	    }
-	    //const moveChoice = safeMoves[0]
+	    console.log('Safe moves', safeMoves);
+	    console.log('Move choice', moveChoice);
 	    // Response data
 	    var responseData = {
 	        move: moveChoice,
@@ -19918,14 +19957,21 @@ module.exports =
 	    }
 	    /**
 	     * Determines if the given snakes has one of its body
-	     * segments at the given coordinate.
+	     * segments at the given coordinate. The tail is not included,
+	     * unless the snake will grow on the next turn.
 	     * @param coord Coord to test.
 	     * @return True if the snake has the coordinate, false otherwise.
 	     */
 	    Snake.prototype.hasCoord = function (coord) {
-	        return this.body.some(function (segment) {
-	            return coord.equals(segment);
-	        });
+	        for (var i = 0; i < this.body.length - 1; i++) {
+	            if (coord.equals(this.body[i])) {
+	                return true;
+	            }
+	        }
+	        if (this.willGrow() && coord.equals(this.getTail())) {
+	            return true;
+	        }
+	        return false;
 	    };
 	    // TODO
 	    Snake.prototype.willDie = function () {
@@ -19940,21 +19986,44 @@ module.exports =
 	        return this.health == 100;
 	    };
 	    /**
-	     * Determines the location that the snake's tail had on
-	     * the previous turn (unless it just ate, in which case we get
-	     * the location from two turns ago).
-	     * @return The location its tail had
-	     */
-	    Snake.prototype.getTail = function () {
-	        var currentTail = this.body[this.body.length - 1];
-	        var nextTail = this.body[this.body.length - 2];
-	        return snake_utils_1.moveToCoord(currentTail, snake_utils_1.coordToMove(nextTail, currentTail));
-	    };
-	    /**
 	     * Determines if the snake should get some grub.
 	     */
 	    Snake.prototype.isHungry = function () {
 	        return this.health <= 50;
+	    };
+	    /**
+	     * Returns the head segment of the snake.
+	     */
+	    Snake.prototype.getHead = function () {
+	        return this.body[0];
+	    };
+	    /**
+	     * Returns the tail of the snake.
+	     */
+	    Snake.prototype.getTail = function () {
+	        return this.body[this.body.length - 1];
+	    };
+	    /**
+	     * Determines if the snake is of even or odd length.
+	     * @return True if the snake has even length, false
+	     * if it has odd length.
+	     */
+	    Snake.prototype.hasEvenLength = function () {
+	        return this.body.length % 2 == 0;
+	    };
+	    /**
+	     * Returns an array of Coords describing the snakes body
+	     * should it continue forward on the next turn.
+	     */
+	    Snake.prototype.moveForward = function () {
+	        var body = [];
+	        var currentHead = this.getHead();
+	        var previousHead = this.body[1];
+	        body.push(snake_utils_1.moveToCoord(currentHead, snake_utils_1.coordToMove(previousHead, currentHead)));
+	        for (var i = 0; i < this.body.length - 1; i++) {
+	            body.push(this.body[i]);
+	        }
+	        return body;
 	    };
 	    return Snake;
 	}();

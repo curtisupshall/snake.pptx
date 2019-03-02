@@ -21,14 +21,21 @@ export default class Snake {
 
     /**
      * Determines if the given snakes has one of its body
-     * segments at the given coordinate.
+     * segments at the given coordinate. The tail is not included,
+     * unless the snake will grow on the next turn.
      * @param coord Coord to test.
      * @return True if the snake has the coordinate, false otherwise.
      */
     hasCoord(coord: Coord): boolean {
-        return this.body.some((segment: Coord) => {
-            return coord.equals(segment)
-        })
+        for (let i = 0; i < this.body.length - 1; i ++) {
+            if (coord.equals(this.body[i])) {
+                return true
+            }
+        }
+        if (this.willGrow() && coord.equals(this.getTail())) {
+            return true
+        }
+        return false
     }
 
     // TODO
@@ -46,21 +53,47 @@ export default class Snake {
     }
 
     /**
-     * Determines the location that the snake's tail had on 
-     * the previous turn (unless it just ate, in which case we get
-     * the location from two turns ago).
-     * @return The location its tail had
-     */
-    getTail(): Coord {
-        let currentTail = this.body[this.body.length - 1]
-        let nextTail = this.body[this.body.length - 2]
-        return moveToCoord(currentTail, coordToMove(nextTail, currentTail))
-    }
-
-    /**
      * Determines if the snake should get some grub.
      */
     isHungry(): boolean {
         return this.health <= 50
+    }
+
+    /**
+     * Returns the head segment of the snake.
+     */
+    getHead(): Coord {
+        return this.body[0]
+    }
+
+    /**
+     * Returns the tail of the snake.
+     */
+    getTail(): Coord {
+        return this.body[this.body.length - 1]
+    }
+
+    /**
+     * Determines if the snake is of even or odd length.
+     * @return True if the snake has even length, false
+     * if it has odd length.
+     */
+    hasEvenLength(): boolean {
+        return this.body.length % 2 == 0
+    }
+
+    /**
+     * Returns an array of Coords describing the snakes body
+     * should it continue forward on the next turn.
+     */
+    moveForward(): Coord[] {
+        let body: Coord[] = []
+        let currentHead = this.getHead()
+        let previousHead = this.body[1]
+        body.push(moveToCoord(currentHead, coordToMove(previousHead, currentHead)))
+        for (let i = 0; i < this.body.length - 1; i ++) {
+            body.push(this.body[i])
+        }
+        return body
     }
 }
