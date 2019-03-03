@@ -19851,13 +19851,26 @@ module.exports =
 	     * the move won't back us into a corner, etc.
 	     */
 	    var safeMoves = allMoves.reduce(function (arr, direction) {
-	        var coord = snake_utils_1.moveToCoord(me.body[0], direction);
+	        var coord = snake_utils_1.moveToCoord(me.getHead(), direction);
 	        var isDummyHead = dummyHeads.some(function (dummyHead) {
 	            return coord.equals(dummyHead.coord) && dummyHead.avoid;
 	        });
 	        var isOoB = ooB(coord);
 	        var isASegment = isSegment(coord);
 	        if (!isDummyHead && !isOoB && !isASegment) {
+	            arr.push(direction);
+	        }
+	        return arr;
+	    }, []);
+	    /**
+	     * Moves that may result in a death, but may not.
+	     */
+	    var riskyMoves = allMoves.reduce(function (arr, direction) {
+	        var coord = snake_utils_1.moveToCoord(me.getHead(), direction);
+	        var isDummyHead = dummyHeads.some(function (dummyHead) {
+	            return coord.equals(dummyHead.coord);
+	        });
+	        if (isDummyHead) {
 	            arr.push(direction);
 	        }
 	        return arr;
@@ -19901,7 +19914,7 @@ module.exports =
 	    // We decided our final move based on target priority list
 	    var finalMove = false;
 	    var prelimMove = false;
-	    var moveChoice = safeMoves[0];
+	    var moveChoice = safeMoves[snake_utils_1.randInt(0, safeMoves.length - 1)];
 	    var head = me.getHead();
 	    var targetPath = [];
 	    while (!finalMove) {
@@ -20094,24 +20107,6 @@ module.exports =
 	 */
 	exports.coordToMove = function (from, to) {
 	    if (to.x > from.x) return 'right';else if (to.x < from.x) return 'left';else if (to.y > from.y) return 'down';else if (to.y < from.y) return 'up';else return null;
-	};
-	/**
-	 * Determines the closest coordinate to a given location from
-	 * a list of other coordinates.
-	 * @param from The starting location.
-	 * @param array An array of other Coords.
-	 * @return The closest coord to `from`
-	 */
-	exports.closest = function (from, array) {
-	    var closest = array[0];
-	    if (array.length > 1) {
-	        for (var i = 1; i < array.length - 1; i++) {
-	            if (array[i].distanceTo(from) < closest.distanceTo(from)) {
-	                closest = array[i];
-	            }
-	        }
-	    }
-	    return closest;
 	};
 	exports.randInt = function (min, max) {
 	    return Math.floor(Math.random() * (max - min)) + min;

@@ -38,25 +38,6 @@ export const coordToMove = (from: Coord, to: Coord): Move | null => {
 	else return null
 }
 
-/**
- * Determines the closest coordinate to a given location from
- * a list of other coordinates.
- * @param from The starting location.
- * @param array An array of other Coords.
- * @return The closest coord to `from` 
- */
-export const closest = (from: Coord, array: Coord[]): Coord => {
-	let closest = array[0]
-	if (array.length > 1) {
-		for (let i = 1; i < array.length - 1; i ++) {
-			if (array[i].distanceTo(from) < closest.distanceTo(from)) {
-				closest = array[i]
-			}
-		}
-	}
-	return closest
-}
-
 export const randInt = (min: number, max: number) => {
 	return Math.floor(Math.random() * (max - min)) + min
 }

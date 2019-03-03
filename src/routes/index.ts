@@ -5,7 +5,7 @@ import {
 } from "../types/battlesnake"
 import Coord from '../Coord'
 import Snake from '../Snake'
-import { moveToCoord, coordToMove, closest, randInt } from '../utils/snake.utils'
+import { moveToCoord, coordToMove, randInt } from '../utils/snake.utils'
 import { json } from "body-parser";
 
 const astar = require('javascript-astar')
@@ -191,13 +191,27 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 	 * the move won't back us into a corner, etc.
 	 */
 	const safeMoves: Move[] = allMoves.reduce((arr: Move[], direction) => {
-		const coord = moveToCoord(me.body[0], direction)
+		const coord = moveToCoord(me.getHead(), direction)
 		let isDummyHead = dummyHeads.some((dummyHead) => {
 			return coord.equals(dummyHead.coord) && dummyHead.avoid
 		})
 		let isOoB = ooB(coord)
 		let isASegment = isSegment(coord)
 		if ( !isDummyHead && !isOoB && !isASegment ) {
+			arr.push(direction)
+		}
+		return arr
+	}, [])
+
+	/**
+	 * Moves that may result in a death, but may not.
+	 */
+	const riskyMoves: Move[] = allMoves.reduce((arr: Move[], direction) => {
+		const coord = moveToCoord(me.getHead(), direction)
+		let isDummyHead = dummyHeads.some((dummyHead) => {
+			return coord.equals(dummyHead.coord)
+		})
+		if (isDummyHead) {
 			arr.push(direction)
 		}
 		return arr

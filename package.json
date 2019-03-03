@@ -1,14 +1,13 @@
 {
-  "name": "battlesnake-node-typescript",
-  "description": "A simple BattleSnake AI written in TypeScript for NodeJS",
-  "version": "0.0.0",
+  "name": "snake.pptx",
+  "description": "A Powerpoint masterpiece",
+  "version": "0.0.1",
   "private": true,
-  "author": "Giftbit",
+  "author": "CurtisUpshall & SolidSnackDrive",
   "repository": "https://github.com/giftbit/battlesnake-typescript",
   "licenses": [
     {
-      "type": "WTFPL",
-      "url": "http://www.wtfpl.net/txt/copying/"
+      "type": "MIT"
     }
   ],
   "dependencies": {
