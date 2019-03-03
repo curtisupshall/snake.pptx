@@ -5,7 +5,7 @@ import {
 } from "../types/battlesnake"
 import Coord from '../Coord'
 import Snake from '../Snake'
-import { moveToCoord, coordToMove, closest } from '../utils/snake.utils'
+import { moveToCoord, coordToMove, closest, randInt } from '../utils/snake.utils'
 import { json } from "body-parser";
 
 const astar = require('javascript-astar')
@@ -247,7 +247,7 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 	// We decided our final move based on target priority list
 	let finalMove = false
 	let prelimMove = false
-	let moveChoice = safeMoves[0]
+	let moveChoice = safeMoves[randInt(0, safeMoves.length - 1)]
 	let head = me.getHead()
 	let targetPath: Coord[] = []
 	while (!finalMove) {
