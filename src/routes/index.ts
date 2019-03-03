@@ -76,7 +76,7 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 		let head: Coord = snake.body[0]
 		dummies.push(...allMoves.reduce((directions: DummyHead[], dir: Move) => {
 			let step: Coord = moveToCoord(head, dir)
-			if (!snake.hasCoord(step) && !ooB(step)) {
+			if (!snake.hasCoord(step) && !ooB(step) && !step.equals(me.getTail())) {
 				directions.push({
 					coord: step,
 					avoid: snake.body.length >= me.body.length
@@ -152,7 +152,14 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 	 * Determines if we should go for food or not.
 	 */
 	const needFood = (): boolean => {
-		return me.isHungry() || !me.hasEvenLength()
+		let amLongest = true
+		for (let i = 0; i < enemies.length; i ++) {
+			if (enemies[i].body.length > me.body.length) {
+				amLongest = false
+				break
+			}
+		}
+		return !me.hasEvenLength() //|| !amLongest
 	}
 	/**
 	 * Helper method for using the A* library, which gives us the shortest
@@ -212,21 +219,28 @@ router.post('/move', (req: MoveRequest, res: MoveResponse): MoveResponse => {
 	 */
 	let targets: Target[] = []
 	
+	if (me.isHungry()) {
+		for (let i = 0; i < food.length; i ++) {
+			targets.push({coord: food[i], name: 'Food '+food[i].toString()})
+		}
+	}
 	if (killCoords.length) {
 		for (let i = 0; i < killCoords.length; i ++) {
 			targets.push({coord: killCoords[i], name: 'killCoord '+killCoords[i].toString()})
 		}
-	}
-	if (needFood()) {
-		for (let i = 0; i < food.length; i ++) {
-			targets.push({coord: food[i], name: 'Food '+food[i].toString()})
-		}
 		targets.push({coord: me.getTail(), name: 'Our tail '+me.getTail().toString()})
 	}
 	else {
-		targets.push({coord: me.getTail(), name: 'Our tail '+me.getTail().toString()})
-		for (let i = 0; i < food.length; i ++) {
-			targets.push({coord: food[i], name: 'Food '+food[i].toString()})
+		if (needFood()) {
+			for (let i = 0; i < food.length; i ++) {
+				targets.push({coord: food[i], name: 'Food '+food[i].toString()})
+			}
+		}
+		else {
+			targets.push({coord: me.getTail(), name: 'Our tail '+me.getTail().toString()})
+			for (let i = 0; i < killCoords.length; i ++) {
+				targets.push({coord: killCoords[i], name: 'killCoord '+killCoords[i].toString()})
+			}
 		}
 	}
 	

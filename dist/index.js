@@ -19738,7 +19738,7 @@ module.exports =
 	        var head = snake.body[0];
 	        dummies.push.apply(dummies, allMoves.reduce(function (directions, dir) {
 	            var step = snake_utils_1.moveToCoord(head, dir);
-	            if (!snake.hasCoord(step) && !ooB(step)) {
+	            if (!snake.hasCoord(step) && !ooB(step) && !step.equals(me.getTail())) {
 	                directions.push({
 	                    coord: step,
 	                    avoid: snake.body.length >= me.body.length
@@ -19811,7 +19811,14 @@ module.exports =
 	     * Determines if we should go for food or not.
 	     */
 	    var needFood = function needFood() {
-	        return me.isHungry() || !me.hasEvenLength();
+	        var amLongest = true;
+	        for (var i = 0; i < enemies.length; i++) {
+	            if (enemies[i].body.length > me.body.length) {
+	                amLongest = false;
+	                break;
+	            }
+	        }
+	        return !me.hasEvenLength(); //|| !amLongest
 	    };
 	    /**
 	     * Helper method for using the A* library, which gives us the shortest
@@ -19869,20 +19876,26 @@ module.exports =
 	     * A prioritized list of target Coords
 	     */
 	    var targets = [];
+	    if (me.isHungry()) {
+	        for (var i = 0; i < food.length; i++) {
+	            targets.push({ coord: food[i], name: 'Food ' + food[i].toString() });
+	        }
+	    }
 	    if (killCoords.length) {
 	        for (var i = 0; i < killCoords.length; i++) {
 	            targets.push({ coord: killCoords[i], name: 'killCoord ' + killCoords[i].toString() });
 	        }
-	    }
-	    if (needFood()) {
-	        for (var i = 0; i < food.length; i++) {
-	            targets.push({ coord: food[i], name: 'Food ' + food[i].toString() });
-	        }
 	        targets.push({ coord: me.getTail(), name: 'Our tail ' + me.getTail().toString() });
 	    } else {
-	        targets.push({ coord: me.getTail(), name: 'Our tail ' + me.getTail().toString() });
-	        for (var i = 0; i < food.length; i++) {
-	            targets.push({ coord: food[i], name: 'Food ' + food[i].toString() });
+	        if (needFood()) {
+	            for (var i = 0; i < food.length; i++) {
+	                targets.push({ coord: food[i], name: 'Food ' + food[i].toString() });
+	            }
+	        } else {
+	            targets.push({ coord: me.getTail(), name: 'Our tail ' + me.getTail().toString() });
+	            for (var i = 0; i < killCoords.length; i++) {
+	                targets.push({ coord: killCoords[i], name: 'killCoord ' + killCoords[i].toString() });
+	            }
 	        }
 	    }
 	    // We decided our final move based on target priority list
